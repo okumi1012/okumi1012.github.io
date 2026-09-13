@@ -1,0 +1,320 @@
+<roblox version="4">
+  <Item class="ReplicatedStorage" referent="0">
+    <Properties>
+      <string name="Name">ReplicatedStorage</string>
+    </Properties>
+    <Item class="Folder" referent="1">
+      <Properties>
+        <string name="Name">Shared</string>
+      </Properties>
+      <Item class="ModuleScript" referent="2">
+        <Properties>
+          <string name="Name">GameConfig</string>
+          <string name="Source"><![CDATA[local GameConfig = {
+	ClickCooldown = 0.07,
+	BaseUpgradeCost = 25,
+	UpgradeCostStep = 25,
+}
+
+function GameConfig.GetUpgradeCost(multiplier)
+	return GameConfig.BaseUpgradeCost + ((multiplier - 1) * GameConfig.UpgradeCostStep)
+end
+
+return GameConfig
+]]></string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="ServerScriptService" referent="3">
+    <Properties>
+      <string name="Name">ServerScriptService</string>
+    </Properties>
+    <Item class="Folder" referent="4">
+      <Properties>
+        <string name="Name">ClickerServer</string>
+      </Properties>
+      <Item class="Script" referent="5">
+        <Properties>
+          <string name="Name">ClickerServer</string>
+          <token name="RunContext">0</token>
+          <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local GameConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameConfig"))
+
+local remotes = Instance.new("Folder")
+remotes.Name = "ClickerRemotes"
+remotes.Parent = ReplicatedStorage
+
+local clickEvent = Instance.new("RemoteEvent")
+clickEvent.Name = "Click"
+clickEvent.Parent = remotes
+
+local buyUpgradeEvent = Instance.new("RemoteEvent")
+buyUpgradeEvent.Name = "BuyUpgrade"
+buyUpgradeEvent.Parent = remotes
+
+local lastClickAt = {}
+
+local function createValue(parent, name, value)
+	local stat = Instance.new("IntValue")
+	stat.Name = name
+	stat.Value = value
+	stat.Parent = parent
+	return stat
+end
+
+local function setupPlayer(player)
+	if player:FindFirstChild("ClickerData") then
+		return
+	end
+	local leaderstats = Instance.new("Folder")
+	leaderstats.Name = "leaderstats"
+	leaderstats.Parent = player
+	createValue(leaderstats, "Clicks", 0)
+
+	local data = Instance.new("Folder")
+	data.Name = "ClickerData"
+	data.Parent = player
+	createValue(data, "Coins", 0)
+	createValue(data, "Multiplier", 1)
+	lastClickAt[player] = -math.huge
+end
+
+local function getData(player)
+	local data = player:FindFirstChild("ClickerData")
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if not data or not leaderstats then
+		return nil
+	end
+
+	return data:FindFirstChild("Coins"), data:FindFirstChild("Multiplier"), leaderstats:FindFirstChild("Clicks")
+end
+
+clickEvent.OnServerEvent:Connect(function(player)
+	local now = os.clock()
+	if now - (lastClickAt[player] or 0) < GameConfig.ClickCooldown then
+		return
+	end
+	lastClickAt[player] = now
+
+	local coins, multiplier, clicks = getData(player)
+	if not coins or not multiplier or not clicks then
+		return
+	end
+
+	coins.Value += multiplier.Value
+	clicks.Value += 1
+end)
+
+buyUpgradeEvent.OnServerEvent:Connect(function(player)
+	local coins, multiplier = getData(player)
+	if not coins or not multiplier then
+		return
+	end
+
+	local cost = GameConfig.GetUpgradeCost(multiplier.Value)
+	if coins.Value < cost then
+		return
+	end
+
+	coins.Value -= cost
+	multiplier.Value += 1
+end)
+
+Players.PlayerAdded:Connect(setupPlayer)
+Players.PlayerRemoving:Connect(function(player)
+	lastClickAt[player] = nil
+end)
+
+for _, player in Players:GetPlayers() do
+	setupPlayer(player)
+end
+]]></string>
+        </Properties>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="StarterPlayer" referent="6">
+    <Properties>
+      <string name="Name">StarterPlayer</string>
+    </Properties>
+    <Item class="StarterPlayerScripts" referent="7">
+      <Properties>
+        <string name="Name">StarterPlayerScripts</string>
+      </Properties>
+      <Item class="Folder" referent="8">
+        <Properties>
+          <string name="Name">ClickerClient</string>
+        </Properties>
+        <Item class="LocalScript" referent="9">
+          <Properties>
+            <string name="Name">ClickerClient</string>
+            <string name="Source"><![CDATA[local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local remotes = ReplicatedStorage:WaitForChild("ClickerRemotes")
+local clickEvent = remotes:WaitForChild("Click")
+local buyUpgradeEvent = remotes:WaitForChild("BuyUpgrade")
+local GameConfig = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("GameConfig"))
+
+local data = player:WaitForChild("ClickerData")
+local coins = data:WaitForChild("Coins")
+local multiplier = data:WaitForChild("Multiplier")
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "SimpleClickerGui"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+gui.Parent = player:WaitForChild("PlayerGui")
+
+local background = Instance.new("Frame")
+background.Size = UDim2.fromScale(1, 1)
+background.BackgroundColor3 = Color3.fromRGB(20, 24, 38)
+background.BorderSizePixel = 0
+background.Parent = gui
+
+local title = Instance.new("TextLabel")
+title.AnchorPoint = Vector2.new(0.5, 0)
+title.Position = UDim2.fromScale(0.5, 0.055)
+title.Size = UDim2.fromScale(0.85, 0.08)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.GothamBlack
+title.Text = "SIMPLE CLICKER"
+title.TextColor3 = Color3.fromRGB(255, 224, 118)
+title.TextScaled = true
+title.Parent = background
+
+local coinsLabel = Instance.new("TextLabel")
+coinsLabel.AnchorPoint = Vector2.new(0.5, 0)
+coinsLabel.Position = UDim2.fromScale(0.5, 0.15)
+coinsLabel.Size = UDim2.fromScale(0.72, 0.07)
+coinsLabel.BackgroundTransparency = 1
+coinsLabel.Font = Enum.Font.GothamBold
+coinsLabel.TextColor3 = Color3.fromRGB(241, 245, 249)
+coinsLabel.TextScaled = true
+coinsLabel.Parent = background
+
+local clickButton = Instance.new("TextButton")
+clickButton.AnchorPoint = Vector2.new(0.5, 0.5)
+clickButton.Position = UDim2.fromScale(0.5, 0.53)
+clickButton.Size = UDim2.fromScale(0.48, 0.25)
+clickButton.BackgroundColor3 = Color3.fromRGB(91, 108, 255)
+clickButton.BorderSizePixel = 0
+clickButton.AutoButtonColor = false
+clickButton.Font = Enum.Font.GothamBlack
+clickButton.Text = "CLICK!"
+clickButton.TextColor3 = Color3.new(1, 1, 1)
+clickButton.TextScaled = true
+clickButton.Parent = background
+
+local clickCorner = Instance.new("UICorner")
+clickCorner.CornerRadius = UDim.new(0.18, 0)
+clickCorner.Parent = clickButton
+
+local upgradeButton = Instance.new("TextButton")
+upgradeButton.AnchorPoint = Vector2.new(0.5, 1)
+upgradeButton.Position = UDim2.fromScale(0.5, 0.92)
+upgradeButton.Size = UDim2.fromScale(0.72, 0.12)
+upgradeButton.BackgroundColor3 = Color3.fromRGB(39, 153, 104)
+upgradeButton.BorderSizePixel = 0
+upgradeButton.AutoButtonColor = false
+upgradeButton.Font = Enum.Font.GothamBold
+upgradeButton.TextColor3 = Color3.new(1, 1, 1)
+upgradeButton.TextScaled = true
+upgradeButton.Parent = background
+
+local upgradeCorner = Instance.new("UICorner")
+upgradeCorner.CornerRadius = UDim.new(0.18, 0)
+upgradeCorner.Parent = upgradeButton
+
+local sessionNote = Instance.new("TextLabel")
+sessionNote.AnchorPoint = Vector2.new(0.5, 0)
+sessionNote.Position = UDim2.fromScale(0.5, 0.945)
+sessionNote.Size = UDim2.fromScale(0.8, 0.028)
+sessionNote.BackgroundTransparency = 1
+sessionNote.Font = Enum.Font.Gotham
+sessionNote.Text = "DEMO · Progress resets when you leave"
+sessionNote.TextColor3 = Color3.fromRGB(165, 174, 195)
+sessionNote.TextScaled = true
+sessionNote.Parent = background
+
+local function refresh()
+	coinsLabel.Text = string.format("COINS: %d   |   x%d", coins.Value, multiplier.Value)
+	upgradeButton.Text = string.format("UPGRADE TO x%d  (%d COINS)", multiplier.Value + 1, GameConfig.GetUpgradeCost(multiplier.Value))
+	upgradeButton.BackgroundColor3 = coins.Value >= GameConfig.GetUpgradeCost(multiplier.Value)
+		and Color3.fromRGB(39, 153, 104)
+		or Color3.fromRGB(86, 96, 116)
+end
+
+local function pulse()
+	local grow = TweenService:Create(clickButton, TweenInfo.new(0.06), {Size = UDim2.fromScale(0.45, 0.235)})
+	local shrink = TweenService:Create(clickButton, TweenInfo.new(0.10), {Size = UDim2.fromScale(0.48, 0.25)})
+	grow:Play()
+	grow.Completed:Once(function()
+		shrink:Play()
+	end)
+end
+
+clickButton.Activated:Connect(function()
+	clickEvent:FireServer()
+	pulse()
+end)
+
+upgradeButton.Activated:Connect(function()
+	buyUpgradeEvent:FireServer()
+end)
+
+coins.Changed:Connect(refresh)
+multiplier.Changed:Connect(refresh)
+refresh()
+]]></string>
+          </Properties>
+        </Item>
+      </Item>
+    </Item>
+  </Item>
+  <Item class="Workspace" referent="10">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <bool name="NeedsPivotMigration">false</bool>
+    </Properties>
+    <Item class="Part" referent="11">
+      <Properties>
+        <string name="Name">Baseplate</string>
+        <bool name="Anchored">true</bool>
+        <Vector3 name="Position">
+          <X>0</X>
+          <Y>-1</Y>
+          <Z>0</Z>
+        </Vector3>
+        <Vector3 name="size">
+          <X>128</X>
+          <Y>2</Y>
+          <Z>128</Z>
+        </Vector3>
+      </Properties>
+    </Item>
+    <Item class="SpawnLocation" referent="12">
+      <Properties>
+        <string name="Name">SpawnLocation</string>
+        <bool name="Anchored">true</bool>
+        <int name="Duration">0</int>
+        <bool name="Neutral">true</bool>
+        <Vector3 name="Position">
+          <X>0</X>
+          <Y>0.5</Y>
+          <Z>0</Z>
+        </Vector3>
+        <Vector3 name="size">
+          <X>6</X>
+          <Y>1</Y>
+          <Z>6</Z>
+        </Vector3>
+      </Properties>
+    </Item>
+  </Item>
+</roblox>
